@@ -434,7 +434,9 @@ function EndScreen({ tone, eyebrow, title, copy, children }: { readonly tone: "v
 }
 
 function DebugOverlay({ snapshot }: { readonly snapshot: GameSnapshot }) {
-  return <aside className="debug-overlay"><strong>ERRANTE // PERF</strong><span>FPS {snapshot.fps}</span><span>Frame {snapshot.frameTime} ms</span><span>Draws {snapshot.drawCalls}</span><span>Tris {snapshot.triangles.toLocaleString("pt-BR")}</span><span>Entidades {snapshot.enemiesActive + snapshot.state.structures.length + 1}</span><span>Corpos {snapshot.enemiesActive + 1}</span><span>Solo {snapshot.grounded ? "apoiado" : "no ar"} · Δ {snapshot.groundError.toFixed(3)}</span><span>Pos {snapshot.state.player.x.toFixed(1)} / {snapshot.state.player.z.toFixed(1)}</span><span>Seed {snapshot.state.seed}</span><span>Evento {snapshot.state.event}</span></aside>;
+  const degrees = (radians: number): string => `${(radians * 180 / Math.PI).toFixed(1)}°`;
+  const posture = snapshot.posture ?? { bodyPitch: 0, bodyRoll: 0, leftKnee: 0, rightKnee: 0, leftFootOffset: 0, rightFootOffset: 0 };
+  return <aside className="debug-overlay"><strong>ERRANTE // PERF</strong><span>FPS {snapshot.fps}</span><span>Frame {snapshot.frameTime} ms</span><span>Draws {snapshot.drawCalls}</span><span>Tris {snapshot.triangles.toLocaleString("pt-BR")}</span><span>Entidades {snapshot.enemiesActive + snapshot.state.structures.length + 1}</span><span>Corpos {snapshot.enemiesActive + 1}</span><span>Solo {snapshot.grounded ? "apoiado" : "no ar"} · Δ {snapshot.groundError.toFixed(3)}</span><span>Corpo ↕ {degrees(posture.bodyPitch)} · ↔ {degrees(posture.bodyRoll)}</span><span>Joelhos E {degrees(posture.leftKnee)} · D {degrees(posture.rightKnee)}</span><span>Pés Δ E {posture.leftFootOffset.toFixed(3)} · D {posture.rightFootOffset.toFixed(3)}</span><span>Pos {snapshot.state.player.x.toFixed(1)} / {snapshot.state.player.z.toFixed(1)}</span><span>Seed {snapshot.state.seed}</span><span>Evento {snapshot.state.event}</span></aside>;
 }
 
 const clampPercent = (value: number): number => Math.min(100, Math.max(0, value));

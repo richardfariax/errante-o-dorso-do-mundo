@@ -4,6 +4,7 @@ import { AudioDirector } from "./audio";
 import { calculateDamage, weaponRange, WEAPON_PROFILES } from "./combat";
 import { getStructure, ITEMS, STRUCTURES, type ItemId, type StructureId } from "./data";
 import { EVENT_BANNERS, eventVisualState, weatherForEvent } from "./events";
+import { solveLegIK, supportPelvisDrop } from "./locomotion";
 import {
   CAMP_POSITION,
   CAVITY_POSITION,
@@ -52,6 +53,14 @@ export interface GameSnapshot {
   readonly paused: boolean;
   readonly grounded: boolean;
   readonly groundError: number;
+  readonly posture: {
+    readonly bodyPitch: number;
+    readonly bodyRoll: number;
+    readonly leftKnee: number;
+    readonly rightKnee: number;
+    readonly leftFootOffset: number;
+    readonly rightFootOffset: number;
+  };
 }
 
 export interface EngineCallbacks {
@@ -168,6 +177,7 @@ export class GameEngine {
   private locomotionPhase = 0;
   private lastFootstepCycle = -1;
   private lightningFlash = 0;
+  private postureDebug = { bodyPitch: 0, bodyRoll: 0, leftKnee: 0, rightKnee: 0, leftFootOffset: 0, rightFootOffset: 0 };
   private debugGroundPointIndex = 0;
   private subtitle: string | null = null;
   private subtitleUntil = 0;
@@ -692,7 +702,6 @@ export class GameEngine {
     const stride = moving ? (sprinting ? 0.86 : 0.58) : 0;
     const airborne = !this.grounded;
     const bobTarget = moving ? Math.abs(Math.sin(this.locomotionPhase)) * (sprinting ? 0.1 : 0.055) : Math.sin(this.state.elapsed * 2.2) * 0.018;
-    rig.position.y = THREE.MathUtils.damp(rig.position.y, bobTarget, 14, delta);
 
     const legLeft = rig.getObjectByName("leg-left");
     const legRight = rig.getObjectByName("leg-right");
@@ -735,31 +744,75 @@ export class GameEngine {
     );
     const groundPitch = airborne ? 0 : clamp(Math.atan2(backHeight - frontHeight, probeDistance * 2), -0.24, 0.24);
     const groundRoll = airborne ? 0 : clamp(Math.atan2(rightHeight - leftHeight, 0.48), -0.26, 0.26);
-    rig.rotation.x = THREE.MathUtils.damp(rig.rotation.x, groundPitch, 12, delta);
-    rig.rotation.z = THREE.MathUtils.damp(rig.rotation.z, groundRoll, 12, delta);
+    // Gravity defines the body's vertical axis. Uneven ground is absorbed by
+    // independent legs instead of tilting the whole character like a rigid prop.
+    rig.rotation.x = THREE.MathUtils.damp(rig.rotation.x, 0, 15, delta);
+    rig.rotation.z = THREE.MathUtils.damp(rig.rotation.z, 0, 15, delta);
 
     const strideProbe = moving ? wave * (sprinting ? 0.2 : 0.13) : 0;
-    for (const [side, leg, sideHeight] of [[-1, legLeft, leftHeight], [1, legRight, rightHeight]] as const) {
+    const leftFootHeight = moving
+      ? this.surfaceHeightAt(
+        this.visuals.player.position.x - facing.rightX * 0.22 - facing.forwardX * strideProbe,
+        this.visuals.player.position.z - facing.rightZ * 0.22 - facing.forwardZ * strideProbe,
+      )
+      : leftHeight;
+    const rightFootHeight = moving
+      ? this.surfaceHeightAt(
+        this.visuals.player.position.x + facing.rightX * 0.22 + facing.forwardX * strideProbe,
+        this.visuals.player.position.z + facing.rightZ * 0.22 + facing.forwardZ * strideProbe,
+      )
+      : rightHeight;
+    const leftGroundOffset = airborne ? 0 : leftFootHeight - rootGround;
+    const rightGroundOffset = airborne ? 0 : rightFootHeight - rootGround;
+    const pelvisDrop = airborne ? 0 : supportPelvisDrop(leftGroundOffset, rightGroundOffset);
+    rig.position.y = THREE.MathUtils.damp(rig.position.y, bobTarget + pelvisDrop, 16, delta);
+
+    for (const leg of [legLeft, legRight]) {
       if (!leg) continue;
-      const footHeight = moving
-        ? this.surfaceHeightAt(
-          this.visuals.player.position.x + facing.rightX * side * 0.22 + facing.forwardX * strideProbe * side,
-          this.visuals.player.position.z + facing.rightZ * side * 0.22 + facing.forwardZ * strideProbe * side,
-        )
-        : sideHeight;
-      const heightCorrection = airborne ? 0 : clamp(footHeight - rootGround, -0.2, 0.32);
       const baseY = typeof leg.userData.baseY === "number" ? leg.userData.baseY : 1.08;
-      leg.position.y = THREE.MathUtils.damp(leg.position.y, baseY + heightCorrection, 20, delta);
+      leg.position.y = THREE.MathUtils.damp(leg.position.y, baseY, 20, delta);
     }
 
-    if (legLeft) legLeft.rotation.x = THREE.MathUtils.damp(legLeft.rotation.x, airborne ? 0.5 : wave * stride, 15, delta);
-    if (legRight) legRight.rotation.x = THREE.MathUtils.damp(legRight.rotation.x, airborne ? -0.35 : -wave * stride, 15, delta);
-    const leftKneeBend = airborne ? 0.72 : moving ? 0.12 + Math.max(0, -wave) * stride * 0.82 : 0.06;
-    const rightKneeBend = airborne ? 0.48 : moving ? 0.12 + Math.max(0, wave) * stride * 0.82 : 0.06;
+    const strideReach = moving ? (sprinting ? 0.42 : 0.3) : 0;
+    const stepLift = moving ? (sprinting ? 0.16 : 0.1) : 0;
+    const leftIK = solveLegIK({
+      hipHeight: 1.08 + pelvisDrop,
+      groundOffset: leftGroundOffset,
+      forwardOffset: -wave * strideReach,
+      swingLift: Math.max(0, -wave) * stepLift,
+    });
+    const rightIK = solveLegIK({
+      hipHeight: 1.08 + pelvisDrop,
+      groundOffset: rightGroundOffset,
+      forwardOffset: wave * strideReach,
+      swingLift: Math.max(0, wave) * stepLift,
+    });
+    const leftHipAngle = airborne ? 0.5 : leftIK.hipAngle;
+    const rightHipAngle = airborne ? -0.35 : rightIK.hipAngle;
+    const leftKneeBend = airborne ? 0.72 : leftIK.kneeAngle;
+    const rightKneeBend = airborne ? 0.48 : rightIK.kneeAngle;
+    if (legLeft) legLeft.rotation.x = THREE.MathUtils.damp(legLeft.rotation.x, leftHipAngle, 17, delta);
+    if (legRight) legRight.rotation.x = THREE.MathUtils.damp(legRight.rotation.x, rightHipAngle, 17, delta);
     if (kneeLeft) kneeLeft.rotation.x = THREE.MathUtils.damp(kneeLeft.rotation.x, leftKneeBend, 17, delta);
     if (kneeRight) kneeRight.rotation.x = THREE.MathUtils.damp(kneeRight.rotation.x, rightKneeBend, 17, delta);
-    if (bootLeft) bootLeft.rotation.z = THREE.MathUtils.damp(bootLeft.rotation.z, moving ? -wave * 0.08 : 0, 14, delta);
-    if (bootRight) bootRight.rotation.z = THREE.MathUtils.damp(bootRight.rotation.z, moving ? wave * 0.08 : 0, 14, delta);
+    if (bootLeft) {
+      const ankleTarget = airborne ? Math.PI / 2 : Math.PI / 2 + groundPitch + leftIK.ankleCounterAngle;
+      bootLeft.rotation.x = THREE.MathUtils.damp(bootLeft.rotation.x, ankleTarget, 18, delta);
+      bootLeft.rotation.z = THREE.MathUtils.damp(bootLeft.rotation.z, airborne ? 0 : groundRoll - wave * stride * 0.04, 16, delta);
+    }
+    if (bootRight) {
+      const ankleTarget = airborne ? Math.PI / 2 : Math.PI / 2 + groundPitch + rightIK.ankleCounterAngle;
+      bootRight.rotation.x = THREE.MathUtils.damp(bootRight.rotation.x, ankleTarget, 18, delta);
+      bootRight.rotation.z = THREE.MathUtils.damp(bootRight.rotation.z, airborne ? 0 : groundRoll + wave * stride * 0.04, 16, delta);
+    }
+    this.postureDebug = {
+      bodyPitch: rig.rotation.x,
+      bodyRoll: rig.rotation.z,
+      leftKnee: kneeLeft?.rotation.x ?? 0,
+      rightKnee: kneeRight?.rotation.x ?? 0,
+      leftFootOffset: leftGroundOffset,
+      rightFootOffset: rightGroundOffset,
+    };
     if (armLeft) armLeft.rotation.x = THREE.MathUtils.damp(armLeft.rotation.x, airborne ? -0.72 : -wave * stride * 0.72, 13, delta);
     if (armRight) armRight.rotation.x = THREE.MathUtils.damp(armRight.rotation.x, airborne ? -1.05 : wave * stride * 0.72 - attackSwing * 1.65, 16, delta);
     if (armRight) armRight.rotation.z = THREE.MathUtils.damp(armRight.rotation.z, attackSwing * -0.48, 18, delta);
@@ -1447,6 +1500,7 @@ export class GameEngine {
       paused: this.paused,
       grounded: this.grounded,
       groundError: this.visuals.player.position.y - this.surfaceHeightAt(this.visuals.player.position.x, this.visuals.player.position.z),
+      posture: { ...this.postureDebug },
     });
   }
 
