@@ -3,11 +3,13 @@ import type { ItemId, StructureId } from "./data";
 import {
   CAMP_POSITION,
   CAVITY_POSITION,
+  DORSAL_SPINE_ANCHORS,
   DORSAL_PLATES,
   type DorsalPlateDefinition,
   isInsideDorso,
   MAP_HALF_LENGTH,
   MAP_HALF_WIDTH,
+  MINERAL_SEAM_NODES,
   pathCenter,
   RUIN_POSITION,
   terrainHeight,
@@ -621,11 +623,53 @@ function createBoneSpineGeometry(height: number, radius: number, bend: number): 
       indices.push(a, c, b, b, c, d);
     }
   }
+  const baseCenter = vertices.length / 3;
+  vertices.push(0, 0, 0);
+  const tipCenter = vertices.length / 3;
+  vertices.push(bend, height, 0);
+  const tipRingStart = heightSegments * (radialSegments + 1);
+  for (let radialIndex = 0; radialIndex < radialSegments; radialIndex += 1) {
+    indices.push(baseCenter, radialIndex + 1, radialIndex);
+    indices.push(tipCenter, tipRingStart + radialIndex, tipRingStart + radialIndex + 1);
+  }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function createAnchoredBoneSpine(
+  x: number,
+  z: number,
+  height: number,
+  radius: number,
+  side: number,
+  index: number,
+  boneMaterial: THREE.MeshStandardMaterial,
+): THREE.Group {
+  const root = new THREE.Group();
+  root.name = `Espinho dorsal enraizado ${index + 1}`;
+  root.position.set(x, terrainHeight(x, z) - radius * 0.35, z);
+  orientToTerrain(root, x, z, index * 0.61 + side * 0.08);
+
+  const socket = new THREE.Mesh(new THREE.DodecahedronGeometry(radius * 1.12, 1), boneMaterial);
+  socket.name = "Encaixe ósseo parcialmente enterrado";
+  socket.scale.set(1.08, 0.44, 0.92);
+  socket.rotation.y = index * 0.73;
+  socket.castShadow = true;
+  socket.receiveShadow = true;
+  root.add(socket);
+
+  const spine = new THREE.Mesh(createBoneSpineGeometry(height, radius, side * height * 0.14), boneMaterial);
+  spine.name = "Espinho dorsal fechado na base";
+  spine.position.y = radius * 0.08;
+  spine.rotation.z = side * (0.28 + (index % 3) * 0.07);
+  spine.rotation.x = (index % 2 ? -1 : 1) * 0.12;
+  spine.castShadow = true;
+  spine.receiveShadow = true;
+  root.add(spine);
+  return root;
 }
 
 function createOrganicRockGeometry(radius: number, detail: number): THREE.BufferGeometry {
@@ -756,7 +800,8 @@ function createEnvironment(world: THREE.Group, seed: number, settings: GameSetti
       size = 0.72 + random() * 0.7;
       const pathDistance = Math.abs(x - pathCenter(z));
       const spaced = placedTrees.every((tree) => Math.hypot(x - tree.x, z - tree.z) > 1.65 + (size + tree.size) * 0.72);
-      if (pathDistance >= 9.5 && isInsideDorso(x, z, 5) && spaced) break;
+      const resourceClear = MINERAL_SEAM_NODES.every((node) => Math.hypot(x - node.x, z - node.z) > 2.5 + size);
+      if (pathDistance >= 9.5 && isInsideDorso(x, z, 5) && spaced && resourceClear) break;
     }
     placedTrees.push({ x, z, size });
     const ground = terrainHeight(x, z);
@@ -858,10 +903,17 @@ function createEnvironment(world: THREE.Group, seed: number, settings: GameSetti
   const rockGeometry = createOrganicRockGeometry(1, 1);
   const rocks = new THREE.InstancedMesh(rockGeometry, material("#ffffff", { roughness: 0.96 }), settings.quality === "low" ? 70 : 125);
   for (let index = 0; index < rocks.count; index += 1) {
-    let x = (random() - 0.5) * 86;
-    const z = -126 + random() * 258;
-    if (!isInsideDorso(x, z, 3)) x *= 0.72;
-    const scale = 0.25 + random() * 1.35;
+    let x = 0;
+    let z = 0;
+    let scale = 1;
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      x = (random() - 0.5) * 86;
+      z = -126 + random() * 258;
+      if (!isInsideDorso(x, z, 3)) x *= 0.72;
+      scale = 0.25 + random() * 1.35;
+      const resourceClear = MINERAL_SEAM_NODES.every((node) => Math.hypot(x - node.x, z - node.z) > 2.2 + scale * 0.85);
+      if (resourceClear) break;
+    }
     const verticalScale = scale * (0.45 + random() * 0.4);
     dummy.position.set(x, terrainHeight(x, z) + verticalScale * 0.91, z);
     dummy.rotation.set((random() - 0.5) * 0.24, random() * Math.PI, (random() - 0.5) * 0.24);
@@ -882,35 +934,9 @@ function createEnvironment(world: THREE.Group, seed: number, settings: GameSetti
   world.add(swampWater);
 
   const boneMaterial = material("#a99f87", { roughness: 0.88 });
-  for (const side of [-1, 1]) {
-    for (let index = 0; index < 12; index += 1) {
-      const z = 118 - index * 21;
-      const x = pathCenter(z) + side * (33 + Math.sin(index * 1.8) * 3.5);
-      const height = 7 + (index % 4) * 2.2;
-      const radius = 1.25 + (index % 3) * 0.28;
-      const spine = new THREE.Mesh(createBoneSpineGeometry(height, radius, side * height * 0.14), boneMaterial);
-      spine.position.set(x, terrainHeight(x, z) - 0.1, z);
-      spine.rotation.z = side * (0.28 + (index % 3) * 0.07);
-      spine.rotation.x = (index % 2 ? -1 : 1) * 0.12;
-      spine.castShadow = true;
-      world.add(spine);
-      obstacles.push({ x, z, radius: 1.2 + (index % 3) * 0.25 });
-    }
-  }
-
-  const seamMaterial = material("#45c9ba", { emissive: "#087b75", emissiveIntensity: 2.4, roughness: 0.2 });
-  for (let index = 0; index < 22; index += 1) {
-    const z = -122 + index * 11.2;
-    const side = index % 2 === 0 ? -1 : 1;
-    const x = pathCenter(z) + side * (35 + Math.sin(index) * 2.4);
-    const crystalRadius = 0.34 + (index % 3) * 0.11;
-    const crystalScaleY = 2.2 + (index % 2) * 0.8;
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(crystalRadius), seamMaterial);
-    crystal.scale.y = crystalScaleY;
-    crystal.position.set(x, terrainHeight(x, z) + crystalRadius * crystalScaleY * 0.94, z);
-    crystal.rotation.z = side * 0.34;
-    world.add(crystal);
-    obstacles.push({ x, z, radius: 0.36 + crystalRadius * 0.45 });
+  for (const anchor of DORSAL_SPINE_ANCHORS) {
+    world.add(createAnchoredBoneSpine(anchor.x, anchor.z, anchor.height, anchor.radius, anchor.side, anchor.index, boneMaterial));
+    obstacles.push({ x: anchor.x, z: anchor.z, radius: 1.2 + (anchor.index % 3) * 0.25 });
   }
 
   const ruin = new THREE.Group();
@@ -974,14 +1000,15 @@ function createWound(world: THREE.Group): THREE.Group {
   core.scale.set(1, 1.6, 1);
   core.userData.walkable = true;
   wound.add(core);
-  const crystalMaterial = material("#65d4c6", { emissive: "#15776f", emissiveIntensity: 2.1, roughness: 0.25 });
+  const crystalMaterial = material("#65d4c6", { emissive: "#15776f", emissiveIntensity: 1.45, roughness: 0.38 });
   for (let index = 0; index < 6; index += 1) {
-    const crystalRadius = 0.48 + (index % 2) * 0.2;
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(crystalRadius), crystalMaterial);
     const angle = index / 6 * Math.PI * 2;
-    crystal.position.set(Math.sin(angle) * 2.5, crystalRadius * 2.5 * 0.92, Math.cos(angle) * 3.5);
-    crystal.scale.y = 2.5;
-    wound.add(crystal);
+    const neuralCrust = new THREE.Mesh(new THREE.TetrahedronGeometry(0.72 + (index % 2) * 0.16), crystalMaterial);
+    neuralCrust.name = "Crosta neural integrada à ferida";
+    neuralCrust.position.set(Math.sin(angle) * 2.5, 0.09, Math.cos(angle) * 3.5);
+    neuralCrust.scale.set(1.2, 0.2, 1.65);
+    neuralCrust.rotation.set((index % 2 ? -1 : 1) * 0.08, angle + 0.34, 0);
+    wound.add(neuralCrust);
   }
   world.add(wound);
   return wound;
@@ -1034,10 +1061,27 @@ function createResource(id: string, item: ItemId, amount: number, x: number, z: 
     fruit.add(stem);
     visual = fruit;
   } else if (item === "cristal") {
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.62), material("#54c4b8", { emissive: "#126b65", emissiveIntensity: 2 }));
-    crystal.scale.y = 2.1;
-    crystal.position.y = 1.24;
-    visual = crystal;
+    const crystalCluster = new THREE.Group();
+    crystalCluster.name = "Afloramento de cristal neural coletável";
+    const crystalMaterial = material("#54c4b8", { emissive: "#126b65", emissiveIntensity: 2, roughness: 0.3 });
+    const stoneBase = new THREE.Mesh(new THREE.DodecahedronGeometry(0.72, 1), material("#45514d", { roughness: 1 }));
+    stoneBase.name = "Base mineral apoiada no solo";
+    stoneBase.position.y = 0.08;
+    stoneBase.scale.set(1.15, 0.32, 0.92);
+    crystalCluster.add(stoneBase);
+    const shards: readonly [number, number, number, number, number][] = [
+      [0, 0, 0.56, 1.9, -0.08],
+      [-0.38, 0.1, 0.34, 1.25, 0.32],
+      [0.4, -0.08, 0.29, 1.08, -0.38],
+    ];
+    for (const [shardX, shardZ, radius, scaleY, tilt] of shards) {
+      const shard = new THREE.Mesh(new THREE.OctahedronGeometry(radius), crystalMaterial);
+      shard.position.set(shardX, radius * scaleY * 0.76, shardZ);
+      shard.rotation.z = tilt;
+      shard.scale.y = scaleY;
+      crystalCluster.add(shard);
+    }
+    visual = crystalCluster;
   } else {
     const organicResource = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6, 1), material("#7a4a38"));
     organicResource.position.y = 0.55;
@@ -1052,7 +1096,7 @@ function createResource(id: string, item: ItemId, amount: number, x: number, z: 
 }
 
 function createResources(world: THREE.Group): ResourceNode[] {
-  const definitions: readonly [string, ItemId, number, number, number, string][] = [
+  const authoredDefinitions: readonly [string, ItemId, number, number, number, string][] = [
     ["camp-wood", "madeira", 7, -2, 105, "Gravetos salgados"],
     ["camp-fiber", "fibra", 6, 2.4, 104, "Fibras de abrigo"],
     ["forest-wood-a", "madeira", 4, -18, 116, "Galho retorcido"],
@@ -1069,6 +1113,15 @@ function createResources(world: THREE.Group): ResourceNode[] {
     ["ridge-wood", "madeira", 5, 13, -104, "Destroços presos"],
     ["ruin-fiber", "fibra", 3, 23, 4, "Cordame antigo"],
   ];
+  const seamDefinitions: readonly [string, ItemId, number, number, number, string][] = MINERAL_SEAM_NODES.map((node) => [
+    node.id,
+    "cristal",
+    1,
+    node.x,
+    node.z,
+    "Afloramento de cristal neural",
+  ]);
+  const definitions = [...authoredDefinitions, ...seamDefinitions];
   return definitions.map(([id, item, amount, x, z, label]) => {
     const resource = createResource(id, item, amount, x, z, label);
     world.add(resource.object);
@@ -1477,14 +1530,6 @@ export function createWorld(seed: number, settings: GameSettings): WorldVisuals 
     obstacles.push({
       x: WOUND_POSITION.x + Math.sin(angle) * 4.2,
       z: WOUND_POSITION.z + Math.cos(angle) * 6.65,
-      radius: 0.72,
-    });
-  }
-  for (let index = 0; index < 6; index += 1) {
-    const angle = index / 6 * Math.PI * 2;
-    obstacles.push({
-      x: WOUND_POSITION.x + Math.sin(angle) * 2.5,
-      z: WOUND_POSITION.z + Math.cos(angle) * 3.5,
       radius: 0.72,
     });
   }

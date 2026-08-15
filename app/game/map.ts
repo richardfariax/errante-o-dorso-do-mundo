@@ -23,6 +23,21 @@ export interface MovementAxes {
   readonly rightZ: number;
 }
 
+export interface MineralSeamNode {
+  readonly id: string;
+  readonly x: number;
+  readonly z: number;
+}
+
+export interface DorsalSpineAnchor {
+  readonly side: -1 | 1;
+  readonly index: number;
+  readonly x: number;
+  readonly z: number;
+  readonly height: number;
+  readonly radius: number;
+}
+
 export function movementAxes(yaw: number): MovementAxes {
   const forwardX = Math.sin(yaw);
   const forwardZ = Math.cos(yaw);
@@ -37,6 +52,33 @@ export function movementAxes(yaw: number): MovementAxes {
 export function pathCenter(z: number): number {
   return Math.sin(z * 0.036) * 5.8 + Math.sin((z + 28) * 0.017) * 3.2;
 }
+
+/** Collectable neural crystal outcrops following both sides of the dorsal seam. */
+export const MINERAL_SEAM_NODES: readonly MineralSeamNode[] = Object.freeze(
+  Array.from({ length: 22 }, (_, index) => {
+    const z = -122 + index * 11.2;
+    const side = index % 2 === 0 ? -1 : 1;
+    return Object.freeze({
+      id: `seam-crystal-${index + 1}`,
+      x: pathCenter(z) + side * (24 + Math.sin(index) * 1.8),
+      z,
+    });
+  }),
+);
+
+export const DORSAL_SPINE_ANCHORS: readonly DorsalSpineAnchor[] = Object.freeze(
+  ([-1, 1] as const).flatMap((side) => Array.from({ length: 12 }, (_, index) => {
+    const z = 118 - index * 21;
+    return Object.freeze({
+      side,
+      index,
+      x: pathCenter(z) + side * (33 + Math.sin(index * 1.8) * 3.5),
+      z,
+      height: 7 + (index % 4) * 2.2,
+      radius: 1.25 + (index % 3) * 0.28,
+    });
+  })),
+);
 
 /**
  * Dark dorsal plates are shallow, terrain-conforming skin details. Keeping the

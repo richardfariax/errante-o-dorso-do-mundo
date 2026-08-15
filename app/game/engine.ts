@@ -10,6 +10,7 @@ import {
   CAVITY_POSITION,
   DORSAL_PLATES,
   isInsideDorso,
+  MINERAL_SEAM_NODES,
   movementAxes,
   PLAYER_GROUND_OFFSET,
   RUIN_POSITION,
@@ -367,10 +368,11 @@ export class GameEngine {
     if (event.code === "KeyP" && debugEnabled) this.debugAdvanceEvent();
     if (event.code === "KeyK" && debugEnabled) this.state.stats.health = 0;
     if (event.code === "KeyO" && debugEnabled) {
+      const inspectionNode = MINERAL_SEAM_NODES[13] ?? { x: 38, z: 28 };
       this.syncCollisionTransforms();
-      this.visuals.player.position.set(38, this.surfaceHeightAt(38, 28), 28);
-      this.state.player.x = 38;
-      this.state.player.z = 28;
+      this.visuals.player.position.set(inspectionNode.x, this.surfaceHeightAt(inspectionNode.x, inspectionNode.z), inspectionNode.z);
+      this.state.player.x = inspectionNode.x;
+      this.state.player.z = inspectionNode.z;
     }
     if (event.code === "KeyJ" && debugEnabled) {
       const point = DEBUG_GROUND_POINTS[this.debugGroundPointIndex % DEBUG_GROUND_POINTS.length];

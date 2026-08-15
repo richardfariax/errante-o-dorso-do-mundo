@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CAMP_POSITION,
+  DORSAL_SPINE_ANCHORS,
   DORSAL_PLATES,
   isInsideDorso,
   MAP_HALF_LENGTH,
+  MINERAL_SEAM_NODES,
   movementAxes,
   playerGroundHeight,
   terrainHeight,
@@ -58,5 +60,16 @@ describe("dorsal world layout", () => {
     expect(facingEast.forwardZ).toBeCloseTo(0);
     expect(facingEast.rightX).toBeCloseTo(0);
     expect(facingEast.rightZ).toBeCloseTo(1);
+  });
+
+  it("keeps every neural crystal outcrop unique and reachable on the dorso", () => {
+    expect(MINERAL_SEAM_NODES).toHaveLength(22);
+    expect(new Set(MINERAL_SEAM_NODES.map((node) => node.id)).size).toBe(MINERAL_SEAM_NODES.length);
+    for (const node of MINERAL_SEAM_NODES) {
+      expect(isInsideDorso(node.x, node.z)).toBe(true);
+      expect(Number.isFinite(terrainHeight(node.x, node.z))).toBe(true);
+      const nearestSpine = Math.min(...DORSAL_SPINE_ANCHORS.map((spine) => Math.hypot(node.x - spine.x, node.z - spine.z)));
+      expect(nearestSpine).toBeGreaterThan(5);
+    }
   });
 });
