@@ -9,7 +9,7 @@ import { createNewGame, hasCost, type GameState, type WeaponId } from "./state";
 import { createWorld } from "./world";
 
 type Screen = "title" | "game" | "defeat" | "victory";
-type Panel = "inventory" | "crafting" | "building" | "settings" | "pause" | null;
+type Panel = "inventory" | "crafting" | "building" | "settings" | "guide" | "pause" | null;
 
 interface Toast {
   readonly id: number;
@@ -147,7 +147,7 @@ export function GameApp() {
     document.documentElement.style.setProperty("--text-scale", String(settings.textScale));
   }, [settings]);
 
-  const begin = (state: GameState): void => {
+  const begin = useCallback((state: GameState): void => {
     setPanel(null);
     setSnapshot(null);
     setStartState(state);
@@ -157,7 +157,17 @@ export function GameApp() {
       return;
     }
     setScreen("game");
-  };
+  }, []);
+
+  useEffect(() => {
+    if (screen !== "title" || panel) return undefined;
+    const startWithEnter = (event: KeyboardEvent): void => {
+      if (event.code !== "Enter" || event.repeat || event.target instanceof HTMLButtonElement) return;
+      begin(createNewGame());
+    };
+    window.addEventListener("keydown", startWithEnter);
+    return () => window.removeEventListener("keydown", startWithEnter);
+  }, [begin, panel, screen]);
 
   const closePanel = (): void => {
     setPanel(null);
@@ -181,19 +191,49 @@ export function GameApp() {
       <main className="game-shell title-mode">
         <canvas ref={canvasRef} className="world-canvas" aria-label="Silhueta do colosso migratório no oceano" />
         <div className="cinematic-vignette" />
+        <div className="title-atmosphere" aria-hidden="true"><i /><i /><i /></div>
+        <header className="title-topbar">
+          <div className="title-brand"><span>Ξ</span><div><strong>ERRANTE</strong><small>projeto independente · navegador</small></div></div>
+          <div className="title-status"><i /><span>mundo vivo</span><b>vertical slice 0.1</b></div>
+        </header>
         <section className="title-screen" aria-labelledby="game-title">
-          <p className="eyebrow">uma história de sobrevivência simbiótica</p>
-          <h1 id="game-title">ERRANTE</h1>
-          <p className="subtitle">O Dorso do Mundo</p>
-          <p className="premise">A ilha respira. O horizonte se move. Sobreviva sem destruir aquilo que o mantém vivo.</p>
-          <button className="primary-action" type="button" onClick={() => begin(createNewGame())}>Novo jogo</button>
-          <button className="secondary-action" type="button" disabled={!savedJourney} onClick={() => { const saved = loadGame(); if (saved) begin(saved); }}>
-            Continuar <span>{savedJourney ? "jornada salva" : "sem jornada salva"}</span>
-          </button>
-          <button className="text-action" type="button" onClick={() => setPanel("settings")}>Configurações</button>
+          <div className="title-copy">
+            <p className="eyebrow"><span>01</span> uma história de sobrevivência simbiótica</p>
+            <h1 id="game-title">ERRANTE</h1>
+            <p className="subtitle"><span />O Dorso do Mundo</p>
+            <p className="premise">A ilha respira. O horizonte se move. Explore um ecossistema sobre um colosso migratório — e sobreviva sem destruir aquilo que mantém você vivo.</p>
+            <div className="title-actions">
+              <button className="primary-action" type="button" onClick={() => begin(createNewGame())}><span>Novo jogo</span><kbd>Enter</kbd></button>
+              <button className="secondary-action" type="button" disabled={!savedJourney} onClick={() => { const saved = loadGame(); if (saved) begin(saved); }}>
+                Continuar <span>{savedJourney ? "jornada salva" : "sem jornada"}</span>
+              </button>
+            </div>
+            <div className="title-links">
+              <button type="button" onClick={() => setPanel("guide")}>Como funciona</button>
+              <button type="button" onClick={() => setPanel("settings")}>Configurações</button>
+            </div>
+            <dl className="title-metrics">
+              <div><dt>15–20</dt><dd>minutos por jornada</dd></div>
+              <div><dt>280u</dt><dd>de travessia viva</dd></div>
+              <div><dt>2</dt><dd>desfechos possíveis</dd></div>
+            </dl>
+          </div>
+          <aside className="mission-preview" aria-label="Resumo da missão">
+            <header><span>rota migratória // 07</span><i>ativa</i></header>
+            <p className="mission-number">MISSÃO <b>01</b></p>
+            <h2>Mantenha os dois vivos.</h2>
+            <p>Prepare-se para a tempestade, trate a Ferida Antiga e defenda o dorso durante o encontro final.</p>
+            <ol>
+              <li><span>01</span><div><strong>Despertar</strong><small>coletar · fabricar · explorar</small></div></li>
+              <li><span>02</span><div><strong>Escolher</strong><small>curar ou extrair o colosso</small></div></li>
+              <li><span>03</span><div><strong>Resistir</strong><small>chuva · infestação · encontro</small></div></li>
+            </ol>
+            <footer><span>O dorso lembra de cada escolha.</span><b>◌ 72%</b></footer>
+          </aside>
         </section>
-        <p className="build-mark">VERTICAL SLICE · DESKTOP</p>
+        <footer className="title-footer"><span><kbd>WASD</kbd> mover</span><span><kbd>Mouse</kbd> olhar e atacar</span><span><kbd>E</kbd> interagir</span><b>áudio recomendado</b></footer>
         {panel === "settings" && <SettingsPanel settings={settings} onChange={setSettings} onClose={() => setPanel(null)} />}
+        {panel === "guide" && <MissionGuidePanel onClose={() => setPanel(null)} />}
       </main>
     );
   }
@@ -240,6 +280,23 @@ export function GameApp() {
       {panel === "settings" && <SettingsPanel settings={settings} onChange={setSettings} onClose={() => panel === "settings" && snapshot ? setPanel("pause") : setPanel(null)} />}
       {woundPrompt && snapshot && <WoundChoice state={snapshot.state} onChoose={chooseWound} onClose={() => { setWoundPrompt(false); closePanel(); }} />}
     </main>
+  );
+}
+
+function MissionGuidePanel({ onClose }: { readonly onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <section className="mission-guide">
+        <header><div><p className="panel-eyebrow">briefing de campo</p><h2 id="guide-title">Sua primeira jornada</h2></div><button type="button" onClick={onClose} aria-label="Fechar briefing">×</button></header>
+        <div className="mission-guide-grid">
+          <article><span>01</span><h3>Prepare-se</h3><p>Colete madeira e fibras, fabrique uma lança e erga estruturas antes que o clima mude.</p></article>
+          <article><span>02</span><h3>Leia o dorso</h3><p>O terreno é parte do colosso. Feridas, cristais e construções alteram sua saúde e a simbiose.</p></article>
+          <article><span>03</span><h3>Faça a escolha</h3><p>Curar exige preparo. Extrair oferece poder imediato, mas enfraquece a criatura que carrega você.</p></article>
+          <article><span>04</span><h3>Sobreviva ao encontro</h3><p>Defenda o dorso da infestação e alcance o segundo colosso com ambos ainda vivos.</p></article>
+        </div>
+        <footer><p><kbd>WASD</kbd> mover · <kbd>E</kbd> interagir · <kbd>C</kbd> fabricar · <kbd>B</kbd> construir · <kbd>Esc</kbd> pausar</p><button className="primary-action" type="button" onClick={onClose}>Entendi</button></footer>
+      </section>
+    </div>
   );
 }
 

@@ -1,34 +1,64 @@
 # ERRANTE: O Dorso do Mundo
 
-Vertical slice 3D single-player de sobrevivência para navegador. A partida dura aproximadamente 15–20 minutos e conecta exploração, coleta, crafting, construção, combate, clima, simbiose, vitória, derrota e persistência local em um dorso procedural de 280 unidades de comprimento.
+> Um jogo 3D single-player de sobrevivência simbiótica, feito para navegador. Você não está sobre uma ilha: está sobre um colosso vivo atravessando um mundo inundado.
 
-## Executar
+[▶ Rodar agora](#-rodar-agora) · [Entender a missão](#-a-missão) · [Ver controles](#-controles) · [Conhecer a arquitetura](#-arquitetura)
 
-Requer Node.js 22.13 ou superior.
+![Landing page de ERRANTE: O Dorso do Mundo](./docs/screenshots/landing.jpg)
+
+## ▶ Rodar agora
+
+Requer **Node.js 22.13 ou superior**. Na raiz do projeto:
 
 ```bash
 npm install
-npm run dev
+npm run jogar
 ```
 
-Abra `http://localhost:3000`. O jogo foi projetado para desktop com teclado e mouse.
+Abra **http://localhost:3000**. O jogo foi projetado para desktop com teclado, mouse e áudio.
 
-Validação completa:
+<details>
+<summary>Comandos de desenvolvimento</summary>
 
 ```bash
-npm run typecheck
-npm run lint
-npm test
+npm run dev        # servidor local
+npm run typecheck  # tipos
+npm run lint       # qualidade de código
+npm test           # testes + build + renderização
+npm run build      # build de produção
+npm run start      # executar o build
 ```
 
-Build de produção:
+</details>
 
-```bash
-npm run build
-npm run start
-```
+## 🎯 A missão
 
-## Controles
+Seu objetivo é **manter o Errante e o colosso vivos até o encontro final**. A jornada dura aproximadamente 15–20 minutos e atravessa um dorso procedural de 280 unidades.
+
+| Etapa | O que acontece | Decisão do jogador |
+| --- | --- | --- |
+| **1. Despertar** | O sobrevivente acorda perto de uma fogueira apagada. | Coletar madeira e fibras, fabricar uma lança e reconhecer o terreno. |
+| **2. Preparação** | Fome, sede, exposição e clima começam a pressionar. | Construir abrigo, fogo, bancada e coletor sem sobrecarregar o dorso. |
+| **3. Ferida Antiga** | Uma lesão neural revela cristais valiosos. | Curar o colosso ou extrair recursos e enfraquecer a simbiose. |
+| **4. Migração** | Chuva e mergulho parcial alteram terreno, visão e sobrevivência. | Proteger recursos, procurar altura e reagir ao ambiente vivo. |
+| **5. Infestação** | Parasitas atacam estruturas, personagem e criatura. | Defender o acampamento com armas, armadilhas e balista. |
+| **6. Encontro** | Outro colosso surge além da névoa. | Chegar ao fim com saúde e vínculo suficientes para o melhor desfecho. |
+
+### A regra central: simbiose
+
+Tudo afeta a relação entre personagem e criatura. Curar feridas, evitar excesso de peso e defender o dorso melhora o vínculo. Extrair cristais, abandonar infestações ou explorar demais o organismo oferece vantagens imediatas, mas pode levar a um final mais duro.
+
+O jogo possui **dois desfechos**, calculados pela saúde do colosso e pelo nível de simbiose.
+
+## 📷 Gameplay
+
+| Despertar e exploração | Recursos neurais coletáveis |
+| --- | --- |
+| ![Exploração da floresta dorsal e acampamento inicial](./docs/screenshots/gameplay-floresta.jpg) | ![Coleta de cristais neurais no dorso do colosso](./docs/screenshots/gameplay-cristais.jpg) |
+
+O cenário inclui bosque dorsal, pântano de musgo, Ferida Antiga, cavidade respiratória, ruína presa ao casco, cristas ósseas e oceano facetado em movimento.
+
+## 🎮 Controles
 
 | Ação | Controle |
 | --- | --- |
@@ -45,65 +75,76 @@ npm run start
 | Gancho em pontos ósseos | `G` |
 | Trocar arma | `1`, `2`, `3` |
 | Inventário | `Tab` ou `I` |
-| Crafting | `C` |
+| Fabricação | `C` |
 | Construção | `B` |
 | Girar construção | `R` durante o posicionamento |
-| Snap de construção | Segurar `Ctrl` durante o posicionamento |
+| Encaixe em grade | Segurar `Ctrl` durante o posicionamento |
 | Desmontar estrutura próxima | `X` |
 | Pausa | `Esc` |
-| Overlay de performance | `F3` |
+| Desempenho e contato com o solo | `F3` |
 
-Use `?debug=1` na URL para habilitar atalhos de QA: `P` avança o evento, `V` posiciona o jogador na condição de conclusão, `K` força a condição de derrota, `O` leva à borda para inspecionar o oceano, `J` percorre os marcos e todas as placas escuras na auditoria do piso, e `F` vira o personagem para a câmera. O overlay `F3` mostra posição, estado apoiado/no ar e o erro vertical em relação à malha.
+### Atalhos de validação
 
-## Fluxo da vertical slice
+Acrescente `?debug=1` à URL para habilitar ferramentas de QA:
 
-- Despertar e revelação do colosso sem remover o controle do jogador.
-- Travessia longa por bosque dorsal, pântano de musgo, Ferida Antiga, cavidade respiratória, ruína presa ao casco e cristas ósseas, conectados por uma trilha sinuosa.
-- Personagem low-poly articulado no quadril, ombros, cotovelos, joelhos e tornozelos, com painéis independentes de casaco, faces de dobra, cachecol, cabelo, mochila e animações corporais distintas de repouso, caminhada, corrida, salto e ataque.
-- Oceano low-poly animado por shader, com ondas cruzadas facetadas, cristas refletivas, cinco faixas descontínuas de arrebentação ao redor do dorso, spray, bruma e ambiência sonora própria.
-- Coleta contextual e receitas data-driven para lança, machado, arco, flechas, corda, curativos, alimento e kit de reparo.
-- Construção com preview, validação, rotação, snap, peso dorsal, desmontagem e persistência.
-- Vida, stamina, fome, sede, exposição e infecção, com relações entre clima, abrigo, fogo, descanso e alimentação.
-- Parasita escavador, carrapato dorsal, predador alado e Parasita Alfa, com percepção, investigação, perseguição, ataque, recuo, atordoamento e retorno.
-- Combate com armas distintas, ataques carregados/aéreos, arremesso, bloqueio, parry, armadilhas, balista, hit-stop, reação e partículas.
-- Escolha funcional na Ferida Antiga: curar o colosso ou extrair recursos neurais.
-- Chuva migratória, mergulho parcial, infestação defensiva e encontro final com outro colosso.
-- Dois desfechos baseados na saúde e confiança do colosso, além de derrota por sobrevivência ou combate.
-- Autosave versionado a cada 30 segundos, save manual, Continue e recuperação segura de dados inválidos.
+- `P`: avança o evento atual.
+- `V`: posiciona o jogador na condição de conclusão.
+- `K`: força a condição de derrota.
+- `O`: leva diretamente a um cristal neural coletável.
+- `J`: percorre marcos e placas do terreno.
+- `F`: vira o personagem para inspeção frontal.
+- `F3`: mostra FPS, frame time, draw calls, triângulos, contato do piso, postura e posição.
 
-## Arquitetura
+## 🧭 Sistemas do jogo
 
-- `app/game/data.ts`: itens, receitas e estruturas centralizados.
-- `app/game/state.ts`: regras puras e tipadas de inventário, crafting, construção, sobrevivência, simbiose e cronologia.
-- `app/game/save.ts`: validação defensiva, versionamento e preferências locais.
-- `app/game/world.ts`: geração procedural orgânica, material texturizado, atmosfera, oceano, modelos, instancing e recursos visuais.
-- `app/game/ai.ts`: definições e estado de execução da IA, atributos por arquétipo e feedback material.
-- `app/game/combat.ts`: perfis das armas e regras puras de dano, alcance, carga e ataque aéreo.
-- `app/game/events.ts`: apresentação, clima e curvas visuais da cronologia de eventos.
-- `app/game/engine.ts`: orquestração do loop fixo de 60 Hz, input, câmera, combate, construção e renderização Three.js.
-- `app/game/audio.ts`: paisagem sonora, clima, passos, água, impactos e música adaptativa em camadas sintetizadas com Web Audio.
-- `app/game/GameApp.tsx`: shell React acessível, HUD, menus, configurações e fluxo de telas.
+- Exploração contínua sobre um colosso migratório.
+- Personagem low-poly articulado, com juntas, pernas adaptativas e roupa segmentada.
+- Solo caminhável contínuo com contato independente dos pés em terrenos inclinados.
+- Árvores procedurais conectadas, raízes apoiadas e folhagem presa aos galhos.
+- Oceano low-poly animado por shader, ondas cruzadas, espuma, spray e bruma.
+- Coleta contextual, inventário, receitas e recursos neurais com consequências.
+- Construção com preview, rotação, snap, peso dorsal, desmontagem e persistência.
+- Vida, stamina, fome, sede, exposição e infecção.
+- Quatro arquétipos de inimigos com percepção, perseguição, ataque e recuo.
+- Combate corpo a corpo, ataques carregados, arremesso, bloqueio, parry e balista.
+- Chuva migratória, mergulho parcial, infestação e encontro final.
+- Autosave versionado, save manual e recuperação segura de dados inválidos.
 
-A simulação usa timestep fixo e não depende da taxa de renderização. O estado serializável é separado dos objetos Three.js; assim, save/load e testes exercitam as regras sem depender do renderer.
+## 🧱 Arquitetura
 
-## Performance
+| Módulo | Responsabilidade |
+| --- | --- |
+| `app/game/data.ts` | Itens, receitas e estruturas. |
+| `app/game/state.ts` | Inventário, crafting, sobrevivência, simbiose e cronologia. |
+| `app/game/save.ts` | Validação, versionamento e preferências locais. |
+| `app/game/map.ts` | Terreno, marcos, placas, cristais e âncoras espaciais. |
+| `app/game/vegetation.ts` | Esqueletos conectados e determinísticos das árvores. |
+| `app/game/world.ts` | Three.js, geração visual, oceano, personagens e recursos. |
+| `app/game/ai.ts` | Estados e atributos dos inimigos. |
+| `app/game/combat.ts` | Armas, dano, alcance e regras de ataque. |
+| `app/game/events.ts` | Eventos, clima e apresentação da jornada. |
+| `app/game/engine.ts` | Loop fixo, input, câmera, interação, combate e construção. |
+| `app/game/audio.ts` | Ambiente, clima, passos, impactos e música adaptativa. |
+| `app/game/GameApp.tsx` | Landing page, HUD, menus, configurações e fluxo de telas. |
 
-- Vegetação e rochas instanciadas.
-- Árvores retorcidas montadas com troncos, galhos e copas instanciadas; cobertura rasteira distribuída por bioma.
-- Pool fixo de partículas.
-- Atualização de IA por estados e número limitado de agentes.
-- Presets Baixo, Médio e Alto ajustam pixel ratio, sombras, densidade de vegetação e chuva na criação da partida.
-- Frustum culling nativo do Three.js e geometrias compartilhadas para props repetidos.
-- Overlay `F3` mostra FPS, frame time, draw calls, triângulos, entidades, contato do piso, posição, seed e evento.
+A simulação usa timestep fixo de 60 Hz. O estado serializável permanece separado dos objetos Three.js, permitindo testar save, progressão e regras sem depender do renderer.
 
-## Limitações conhecidas
+## ⚡ Performance
 
-- O jogo é otimizado para teclado e mouse; gamepad e controles touch não fazem parte desta slice.
-- O contato do jogador usa raycast contra as malhas caminháveis reais e ajuste independente dos pés; superfícies verticais não participam do piso. Obstáculos, construções e câmera usam volumes de bloqueio estáveis. Não há simulação rígida completa de props móveis.
-- A câmera evita terreno, vegetação, ossos, ruínas e construções, mas a cavidade é uma experiência curta, não um dungeon interno completo.
-- Áudio e música são sintetizados em camadas para manter o projeto autocontido; não dependem de bancos de som externos.
-- A arte de gameplay segue direção low-poly consistente: faces visíveis, materiais ásperos, silhuetas facetadas, vegetação instanciada, céu e oceano por shader. A textura orgânica autoral fornece microvariação ao dorso sem substituir sua geometria facetada. O cartão social em `public/og.png` é uma ilustração conceitual, não uma captura do jogo.
-- A configuração de qualidade altera o renderer imediatamente; a densidade de cenário correspondente é aplicada ao iniciar ou carregar uma nova partida.
+- Vegetação, pedras e estruturas repetidas usam instancing.
+- Pool fixo de partículas evita alocações durante combate e clima.
+- Presets Baixo, Médio e Alto controlam pixel ratio, sombras, vegetação e chuva.
+- IA usa máquinas de estado e quantidade limitada de agentes simultâneos.
+- Geometrias e materiais são compartilhados entre objetos repetidos.
+- O overlay `F3` permite auditar FPS, frame time, draw calls e triângulos em tempo real.
+
+## Limitações atuais
+
+- Otimizado para teclado e mouse; gamepad e controles touch não fazem parte desta vertical slice.
+- Props móveis não usam uma simulação rígida completa.
+- A cavidade respiratória é uma experiência curta, não um dungeon interno completo.
+- Áudio e música são sintetizados para manter o projeto autocontido.
+- A configuração de qualidade é aplicada integralmente ao iniciar ou carregar uma jornada.
 
 ## Licenças e créditos
 
