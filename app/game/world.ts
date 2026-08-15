@@ -302,6 +302,32 @@ function createClothPanelGeometry(width: number, height: number, flare: number, 
   return geometry;
 }
 
+function createBootGeometry(): THREE.BufferGeometry {
+  const vertices = [
+    -0.13, -0.11, -0.18,
+    0.13, -0.11, -0.18,
+    -0.17, -0.11, 0.34,
+    0.17, -0.11, 0.34,
+    -0.13, 0.1, -0.17,
+    0.13, 0.1, -0.17,
+    -0.16, 0.07, 0.31,
+    0.16, 0.07, 0.31,
+  ];
+  const indices = [
+    0, 1, 2, 1, 3, 2,
+    4, 6, 5, 5, 6, 7,
+    0, 4, 1, 1, 4, 5,
+    2, 3, 6, 3, 7, 6,
+    0, 2, 4, 2, 6, 4,
+    1, 5, 3, 3, 5, 7,
+  ];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function createPlayer(): THREE.Group {
   const group = new THREE.Group();
   group.name = "Errante";
@@ -319,6 +345,7 @@ function createPlayer(): THREE.Group {
   const skin = lowPolyMaterial("#a9775d", { roughness: 0.82 });
   const hair = lowPolyMaterial("#291c18");
   const leather = lowPolyMaterial("#4e3b2c");
+  const bootGeometry = createBootGeometry();
 
   const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.39, 0.3, 7), coatDark);
   pelvis.name = "pelvis";
@@ -388,13 +415,15 @@ function createPlayer(): THREE.Group {
     shin.position.y = -0.25;
     shin.castShadow = true;
     kneePivot.add(shin);
-    const boot = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.28, 3, 7), bootMaterial);
+    const anklePivot = new THREE.Group();
+    anklePivot.name = side < 0 ? "ankle-left" : "ankle-right";
+    anklePivot.position.y = -0.44;
+    const boot = new THREE.Mesh(bootGeometry, bootMaterial);
     boot.name = side < 0 ? "boot-left" : "boot-right";
-    boot.position.set(0, -0.44, 0.13);
-    boot.rotation.x = Math.PI / 2;
-    boot.scale.set(0.9, 1.15, 1);
+    boot.position.set(0, -0.04, 0.11);
     boot.castShadow = true;
-    kneePivot.add(boot);
+    anklePivot.add(boot);
+    kneePivot.add(anklePivot);
     legPivot.add(kneePivot);
     rig.add(legPivot);
 

@@ -4,7 +4,7 @@ import { AudioDirector } from "./audio";
 import { calculateDamage, weaponRange, WEAPON_PROFILES } from "./combat";
 import { getStructure, ITEMS, STRUCTURES, type ItemId, type StructureId } from "./data";
 import { EVENT_BANNERS, eventVisualState, weatherForEvent } from "./events";
-import { solveLegIK, supportPelvisDrop } from "./locomotion";
+import { characterLateralAxis, footSurfaceAlignment, solveLegIK, supportPelvisDrop } from "./locomotion";
 import {
   CAMP_POSITION,
   CAVITY_POSITION,
@@ -83,6 +83,7 @@ interface ParticleRuntime {
 
 const FIXED_STEP = 1 / 60;
 const MAX_STEP_HEIGHT = 0.82;
+const MAX_ANKLE_SURFACE_ANGLE = 0.62;
 const STRUCTURE_COLLISION_RADIUS: Readonly<Record<StructureId, number>> = {
   fogueira: 0.9,
   coletor: 1.8,
@@ -100,6 +101,8 @@ const DEBUG_GROUND_POINTS = [
   { x: WOUND_POSITION.x, z: WOUND_POSITION.z },
   { x: CAVITY_POSITION.x, z: CAVITY_POSITION.z },
   { x: 0, z: -118 },
+  // Outer flank: the steepest continuous walkable cross-slope in the map.
+  { x: 39.5, z: 49 },
   ...DORSAL_PLATES.map(({ x, z }) => ({ x, z })),
 ] as const;
 
@@ -131,6 +134,8 @@ export class GameEngine {
   private readonly localGroundPoint = new THREE.Vector3();
   private readonly inverseWorldMatrix = new THREE.Matrix4();
   private readonly groundNormal = new THREE.Vector3();
+  private readonly leftFootNormal = new THREE.Vector3();
+  private readonly rightFootNormal = new THREE.Vector3();
   private readonly upDirection = new THREE.Vector3(0, 1, 0);
   private readonly lightingPosition = new THREE.Vector3();
   private state: GameState;
@@ -180,6 +185,7 @@ export class GameEngine {
   private lightningFlash = 0;
   private postureDebug = { bodyPitch: 0, bodyRoll: 0, leftKnee: 0, rightKnee: 0, leftFootOffset: 0, rightFootOffset: 0 };
   private debugGroundPointIndex = 0;
+  private debugCloseCamera = false;
   private subtitle: string | null = null;
   private subtitleUntil = 0;
 
@@ -387,6 +393,7 @@ export class GameEngine {
       this.visuals.player.rotation.y = 0;
       this.state.player.rotation = 0;
     }
+    if (event.code === "KeyH" && debugEnabled && !event.repeat) this.debugCloseCamera = !this.debugCloseCamera;
     if (event.code === "KeyV" && debugEnabled) {
       this.state.completed = false;
       this.state.event = "encontro";
@@ -585,13 +592,13 @@ export class GameEngine {
     return this.localGroundPoint.y + clearance;
   }
 
-  private surfaceNormalAt(x: number, z: number): THREE.Vector3 {
+  private surfaceNormalAt(x: number, z: number, target = this.groundNormal): THREE.Vector3 {
     const sampleDistance = 0.42;
     const left = this.surfaceHeightAt(x - sampleDistance, z, 0);
     const right = this.surfaceHeightAt(x + sampleDistance, z, 0);
     const back = this.surfaceHeightAt(x, z - sampleDistance, 0);
     const front = this.surfaceHeightAt(x, z + sampleDistance, 0);
-    return this.groundNormal.set(left - right, sampleDistance * 2, back - front).normalize();
+    return target.set(left - right, sampleDistance * 2, back - front).normalize();
   }
 
   private alignObjectToSurface(object: THREE.Object3D, x: number, z: number, yaw: number): void {
@@ -709,8 +716,8 @@ export class GameEngine {
     const legRight = rig.getObjectByName("leg-right");
     const kneeLeft = rig.getObjectByName("knee-left");
     const kneeRight = rig.getObjectByName("knee-right");
-    const bootLeft = rig.getObjectByName("boot-left");
-    const bootRight = rig.getObjectByName("boot-right");
+    const ankleLeft = rig.getObjectByName("ankle-left");
+    const ankleRight = rig.getObjectByName("ankle-right");
     const armLeft = rig.getObjectByName("arm-left");
     const armRight = rig.getObjectByName("arm-right");
     const forearmLeft = rig.getObjectByName("forearm-left");
@@ -727,43 +734,19 @@ export class GameEngine {
 
     const facing = movementAxes(this.visuals.player.rotation.y);
     const rootGround = this.surfaceHeightAt(this.visuals.player.position.x, this.visuals.player.position.z);
-    const probeDistance = 0.34;
-    const frontHeight = this.surfaceHeightAt(
-      this.visuals.player.position.x + facing.forwardX * probeDistance,
-      this.visuals.player.position.z + facing.forwardZ * probeDistance,
-    );
-    const backHeight = this.surfaceHeightAt(
-      this.visuals.player.position.x - facing.forwardX * probeDistance,
-      this.visuals.player.position.z - facing.forwardZ * probeDistance,
-    );
-    const leftHeight = this.surfaceHeightAt(
-      this.visuals.player.position.x - facing.rightX * 0.24,
-      this.visuals.player.position.z - facing.rightZ * 0.24,
-    );
-    const rightHeight = this.surfaceHeightAt(
-      this.visuals.player.position.x + facing.rightX * 0.24,
-      this.visuals.player.position.z + facing.rightZ * 0.24,
-    );
-    const groundPitch = airborne ? 0 : clamp(Math.atan2(backHeight - frontHeight, probeDistance * 2), -0.24, 0.24);
-    const groundRoll = airborne ? 0 : clamp(Math.atan2(rightHeight - leftHeight, 0.48), -0.26, 0.26);
     // Gravity defines the body's vertical axis. Uneven ground is absorbed by
     // independent legs instead of tilting the whole character like a rigid prop.
     rig.rotation.x = THREE.MathUtils.damp(rig.rotation.x, 0, 15, delta);
     rig.rotation.z = THREE.MathUtils.damp(rig.rotation.z, 0, 15, delta);
 
     const strideProbe = moving ? wave * (sprinting ? 0.2 : 0.13) : 0;
-    const leftFootHeight = moving
-      ? this.surfaceHeightAt(
-        this.visuals.player.position.x - facing.rightX * 0.22 - facing.forwardX * strideProbe,
-        this.visuals.player.position.z - facing.rightZ * 0.22 - facing.forwardZ * strideProbe,
-      )
-      : leftHeight;
-    const rightFootHeight = moving
-      ? this.surfaceHeightAt(
-        this.visuals.player.position.x + facing.rightX * 0.22 + facing.forwardX * strideProbe,
-        this.visuals.player.position.z + facing.rightZ * 0.22 + facing.forwardZ * strideProbe,
-      )
-      : rightHeight;
+    const rigRight = characterLateralAxis(facing.forwardX, facing.forwardZ);
+    const leftFootX = this.visuals.player.position.x - rigRight.x * 0.22 - facing.forwardX * strideProbe;
+    const leftFootZ = this.visuals.player.position.z - rigRight.z * 0.22 - facing.forwardZ * strideProbe;
+    const rightFootX = this.visuals.player.position.x + rigRight.x * 0.22 + facing.forwardX * strideProbe;
+    const rightFootZ = this.visuals.player.position.z + rigRight.z * 0.22 + facing.forwardZ * strideProbe;
+    const leftFootHeight = this.surfaceHeightAt(leftFootX, leftFootZ);
+    const rightFootHeight = this.surfaceHeightAt(rightFootX, rightFootZ);
     const leftGroundOffset = airborne ? 0 : leftFootHeight - rootGround;
     const rightGroundOffset = airborne ? 0 : rightFootHeight - rootGround;
     const pelvisDrop = airborne ? 0 : supportPelvisDrop(leftGroundOffset, rightGroundOffset);
@@ -797,15 +780,35 @@ export class GameEngine {
     if (legRight) legRight.rotation.x = THREE.MathUtils.damp(legRight.rotation.x, rightHipAngle, 17, delta);
     if (kneeLeft) kneeLeft.rotation.x = THREE.MathUtils.damp(kneeLeft.rotation.x, leftKneeBend, 17, delta);
     if (kneeRight) kneeRight.rotation.x = THREE.MathUtils.damp(kneeRight.rotation.x, rightKneeBend, 17, delta);
-    if (bootLeft) {
-      const ankleTarget = airborne ? Math.PI / 2 : Math.PI / 2 + groundPitch + leftIK.ankleCounterAngle;
-      bootLeft.rotation.x = THREE.MathUtils.damp(bootLeft.rotation.x, ankleTarget, 18, delta);
-      bootLeft.rotation.z = THREE.MathUtils.damp(bootLeft.rotation.z, airborne ? 0 : groundRoll - wave * stride * 0.04, 16, delta);
+    this.surfaceNormalAt(leftFootX, leftFootZ, this.leftFootNormal);
+    this.surfaceNormalAt(rightFootX, rightFootZ, this.rightFootNormal);
+    const leftSurface = footSurfaceAlignment({
+      normalX: this.leftFootNormal.x,
+      normalY: this.leftFootNormal.y,
+      normalZ: this.leftFootNormal.z,
+      forwardX: facing.forwardX,
+      forwardZ: facing.forwardZ,
+    });
+    const rightSurface = footSurfaceAlignment({
+      normalX: this.rightFootNormal.x,
+      normalY: this.rightFootNormal.y,
+      normalZ: this.rightFootNormal.z,
+      forwardX: facing.forwardX,
+      forwardZ: facing.forwardZ,
+    });
+    if (ankleLeft) {
+      const pitchTarget = airborne ? -0.08 : clamp(leftSurface.pitch, -MAX_ANKLE_SURFACE_ANGLE, MAX_ANKLE_SURFACE_ANGLE) + leftIK.ankleCounterAngle;
+      const rollTarget = airborne ? 0 : clamp(leftSurface.roll, -MAX_ANKLE_SURFACE_ANGLE, MAX_ANKLE_SURFACE_ANGLE);
+      ankleLeft.rotation.x = THREE.MathUtils.damp(ankleLeft.rotation.x, pitchTarget, 18, delta);
+      ankleLeft.rotation.y = THREE.MathUtils.damp(ankleLeft.rotation.y, 0, 18, delta);
+      ankleLeft.rotation.z = THREE.MathUtils.damp(ankleLeft.rotation.z, rollTarget, 18, delta);
     }
-    if (bootRight) {
-      const ankleTarget = airborne ? Math.PI / 2 : Math.PI / 2 + groundPitch + rightIK.ankleCounterAngle;
-      bootRight.rotation.x = THREE.MathUtils.damp(bootRight.rotation.x, ankleTarget, 18, delta);
-      bootRight.rotation.z = THREE.MathUtils.damp(bootRight.rotation.z, airborne ? 0 : groundRoll + wave * stride * 0.04, 16, delta);
+    if (ankleRight) {
+      const pitchTarget = airborne ? -0.08 : clamp(rightSurface.pitch, -MAX_ANKLE_SURFACE_ANGLE, MAX_ANKLE_SURFACE_ANGLE) + rightIK.ankleCounterAngle;
+      const rollTarget = airborne ? 0 : clamp(rightSurface.roll, -MAX_ANKLE_SURFACE_ANGLE, MAX_ANKLE_SURFACE_ANGLE);
+      ankleRight.rotation.x = THREE.MathUtils.damp(ankleRight.rotation.x, pitchTarget, 18, delta);
+      ankleRight.rotation.y = THREE.MathUtils.damp(ankleRight.rotation.y, 0, 18, delta);
+      ankleRight.rotation.z = THREE.MathUtils.damp(ankleRight.rotation.z, rollTarget, 18, delta);
     }
     this.postureDebug = {
       bodyPitch: rig.rotation.x,
@@ -1349,13 +1352,14 @@ export class GameEngine {
 
   private updateCamera(delta: number): void {
     this.syncCollisionTransforms();
-    const targetHeight = 1.58;
+    const targetHeight = this.debugCloseCamera ? 0.62 : 1.58;
     this.cameraTarget.set(this.visuals.player.position.x, this.visuals.player.position.y + targetHeight, this.visuals.player.position.z);
-    const distance = 7.65;
+    const distance = this.debugCloseCamera ? 3.2 : 7.65;
+    const cameraLift = this.debugCloseCamera ? 0.48 : 1.28;
     const horizontal = Math.cos(this.pitch) * distance;
     this.desiredCamera.set(
       this.cameraTarget.x - Math.sin(this.yaw) * horizontal,
-      this.cameraTarget.y + Math.sin(-this.pitch) * distance + 1.28,
+      this.cameraTarget.y + Math.sin(-this.pitch) * distance + cameraLift,
       this.cameraTarget.z - Math.cos(this.yaw) * horizontal,
     );
     this.constrainCameraAgainstObstacles();

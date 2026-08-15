@@ -93,6 +93,7 @@ Acrescente `?debug=1` à URL para habilitar ferramentas de QA:
 - `O`: leva diretamente a um cristal neural coletável.
 - `J`: percorre marcos e placas do terreno.
 - `F`: vira o personagem para inspeção frontal.
+- `H`: alterna a câmera aproximada para inspecionar pernas e contato dos pés.
 - `F3`: mostra FPS, frame time, draw calls, triângulos, contato do piso, postura e posição.
 
 ## 🧭 Sistemas do jogo

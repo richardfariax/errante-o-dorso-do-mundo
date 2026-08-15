@@ -15,6 +15,24 @@ export interface LegIKSolution {
   readonly extension: number;
 }
 
+export interface FootSurfaceAlignmentInput {
+  readonly normalX: number;
+  readonly normalY: number;
+  readonly normalZ: number;
+  readonly forwardX: number;
+  readonly forwardZ: number;
+}
+
+export interface FootSurfaceAlignment {
+  readonly pitch: number;
+  readonly roll: number;
+}
+
+export interface CharacterLateralAxis {
+  readonly x: number;
+  readonly z: number;
+}
+
 const clamp = (value: number, minimum: number, maximum: number): number => Math.min(maximum, Math.max(minimum, value));
 
 /**
@@ -62,4 +80,34 @@ export function solveLegIK({
 /** Lowers the pelvis vertically when one support foot is below the root. */
 export function supportPelvisDrop(leftGroundOffset: number, rightGroundOffset: number): number {
   return clamp(Math.min(leftGroundOffset, rightGroundOffset) + 0.015, -0.12, 0);
+}
+
+/** Character-local +X in world space; intentionally independent from camera-relative A/D controls. */
+export function characterLateralAxis(forwardX: number, forwardZ: number): CharacterLateralAxis {
+  const forwardLength = Math.max(0.0001, Math.hypot(forwardX, forwardZ));
+  return {
+    x: forwardZ / forwardLength,
+    z: -forwardX / forwardLength,
+  };
+}
+
+/** Converts a world-space surface normal into the character's ankle axes. */
+export function footSurfaceAlignment({
+  normalX,
+  normalY,
+  normalZ,
+  forwardX,
+  forwardZ,
+}: FootSurfaceAlignmentInput): FootSurfaceAlignment {
+  const forwardLength = Math.max(0.0001, Math.hypot(forwardX, forwardZ));
+  const normalizedForwardX = forwardX / forwardLength;
+  const normalizedForwardZ = forwardZ / forwardLength;
+  const lateralAxis = characterLateralAxis(normalizedForwardX, normalizedForwardZ);
+  const localNormalX = normalX * lateralAxis.x + normalZ * lateralAxis.z;
+  const localNormalZ = normalX * normalizedForwardX + normalZ * normalizedForwardZ;
+  const localNormalY = Math.max(0.0001, normalY);
+  return {
+    pitch: Math.atan2(localNormalZ, localNormalY),
+    roll: Math.atan2(-localNormalX, localNormalY),
+  };
 }
