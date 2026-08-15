@@ -1319,6 +1319,7 @@ export class GameEngine {
     const skyUniforms = this.visuals.sky.material.uniforms as Record<string, THREE.IUniform<number>>;
     if (skyUniforms.uTime) skyUniforms.uTime.value = time;
     if (skyUniforms.uStorm) skyUniforms.uStorm.value = eventVisuals.rainActive ? 1 : 0;
+    this.visuals.treeWindTime.value = time;
     const wakePulse = 1 + Math.sin(time * 0.72) * 0.012;
     this.visuals.wake.scale.set(wakePulse, 1, wakePulse);
     this.visuals.wake.rotation.y = Math.sin(time * 0.08) * 0.018;
